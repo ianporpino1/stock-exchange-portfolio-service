@@ -1,0 +1,30 @@
+services:
+  portfolio-service:
+    build: .
+    container_name: portfolio-service
+    depends_on:
+      - postgres
+    ports:
+      - "8081:8081"
+    networks:
+      - stock_exchange_network
+
+  postgres:
+    image: postgres:17
+    container_name: portfolio-db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: portfolio_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 12345
+    ports:
+      - "5436:5432"
+    networks:
+      - stock_exchange_network
+networks:
+  stock_exchange_network:
+    external: true
+
+volumes:
+  postgres_data:

@@ -4,10 +4,10 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 @SpringBootApplication
-public class StockExchangePortfolioServiceApplication {
+public class PortfolioServiceApplication {
 
     public static void main(String[] args) {
-        SpringApplication.run(StockExchangePortfolioServiceApplication.class, args);
+        SpringApplication.run(PortfolioServiceApplication.class, args);
     }
 
 }
