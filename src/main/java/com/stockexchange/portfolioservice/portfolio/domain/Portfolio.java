@@ -3,11 +3,8 @@ package com.stockexchange.portfolioservice.portfolio.domain;
 import com.stockexchange.portfolioservice.exception.ErrorException;
 import com.stockexchange.portfolioservice.trade.Transaction;
 import jakarta.persistence.*;
-
 import java.math.BigDecimal;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.UUID;
+import java.util.*;
 
 @Entity
 @Table(name = "portfolio")
@@ -15,24 +12,30 @@ public class Portfolio {
     @Id
     @GeneratedValue(strategy = GenerationType.AUTO)
     private UUID portfolioId;
+    @Column(nullable = false, unique = true)
     private UUID userId;
-    @OneToMany(cascade = CascadeType.ALL, fetch = FetchType.LAZY)
-    private List<Position> positions;
+    @OneToMany(mappedBy = "portfolio", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    private Set<Position> positions = new HashSet<>();
     private BigDecimal cashBalance;
-    @OneToMany(mappedBy = "portfolio", cascade = CascadeType.ALL, orphanRemoval = true)
-    private List<Transaction> transactions = new ArrayList<>();
+
+    @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true)
+    @JoinColumn(name = "portfolio_id")
+    private Set<Transaction> transactions;
 
     public Portfolio(UUID userId) {
         this.userId = userId;
-        this.positions = new ArrayList<>();
+        this.positions = new HashSet<>();
         this.cashBalance = BigDecimal.valueOf(100000);
-        this.transactions = new ArrayList<>();
+        this.transactions = new HashSet<>();
     }
 
     public Portfolio() {
 
     }
-
+    public void addPosition(Position position) {
+        positions.add(position);
+        position.setPortfolio(this);
+    }
     public UUID getPortfolioId() {
         return portfolioId;
     }
@@ -48,12 +51,10 @@ public class Portfolio {
     public void setUserId(UUID userId) {
         this.userId = userId;
     }
-
-    public List<Position> getPositions() {
+    public Set<Position> getPositions() {
         return positions;
     }
-
-    public void setPositions(List<Position> positions) {
+    public void setPositions(Set<Position> positions) {
         this.positions = positions;
     }
 
@@ -94,7 +95,7 @@ public class Portfolio {
         BigDecimal totalCredit = price.multiply(BigDecimal.valueOf(quantity));
 
         this.cashBalance = this.cashBalance.add(totalCredit);
-        position.processSell(quantity);
+        position.processSell(quantity, price);
 
         if (position.getQuantity() == 0) {
             this.positions.remove(position);

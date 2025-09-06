@@ -5,21 +5,28 @@ import com.stockexchange.portfolioservice.portfolio.domain.OrderType;
 import com.stockexchange.portfolioservice.portfolio.domain.Portfolio;
 import com.stockexchange.portfolioservice.trade.Transaction;
 import com.stockexchange.portfolioservice.portfolio.dto.PortfolioResponse;
-import com.stockexchange.portfolioservice.trade.dto.TradeExecutedRequest;
-
 import com.stockexchange.portfolioservice.trade.TransactionRepository;
+import com.stockexchange.portfolioservice.trade.TransactionStatus;
+import com.stockexchange.portfolioservice.trade.dto.TradeListResponse;
+import com.stockexchange.portfolioservice.trade.dto.TradeResponse;
+import jakarta.transaction.Transactional;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.support.TransactionTemplate;
 
-import java.util.UUID;
+import java.util.*;
+import java.util.stream.Stream;
 
 @Service
 public class PortfolioService {
     private final PortfolioRepository portfolioRepository;
     private final TransactionRepository transactionRepository;
+    private final TransactionTemplate transactionTemplate;
 
-    public PortfolioService(PortfolioRepository portfolioRepository, TransactionRepository transactionRepository) {
+    public PortfolioService(PortfolioRepository portfolioRepository, TransactionRepository transactionRepository, TransactionTemplate transactionTemplate) {
         this.portfolioRepository = portfolioRepository;
         this.transactionRepository = transactionRepository;
+        this.transactionTemplate = transactionTemplate;
     }
 
     public PortfolioResponse getPortfolioByUserId(UUID userId) {
@@ -29,34 +36,87 @@ public class PortfolioService {
         return new PortfolioResponse(portfolio);
     }
 
-    public void updatePortfolioFromTrade(TradeExecutedRequest trade) {
-        if (transactionRepository.existsByTradeId(trade.tradeId())) {
-            System.out.println("Trade " + trade.tradeId() + " já foi processado.");
-            return;
-        }
-        Portfolio buyerPortfolio = portfolioRepository.findByUserId(trade.buyerUserId())
-                .orElseGet(() -> createPortfolioForUser(trade.buyerUserId()));
+    @Transactional
+    public void applyTransactionToPortfolio(Transaction transaction) {
+        UUID userId = transaction.getUserId();
+        Portfolio portfolio = getOrCreatePortfolio(userId);
+        portfolio.applyTransaction(transaction.getSymbol(), transaction.getQuantity(), transaction.getPrice(), transaction.getOrderType());
 
-        Portfolio sellerPortfolio = portfolioRepository.findByUserId(trade.sellerUserId())
-                .orElseGet(() -> createPortfolioForUser(trade.sellerUserId()));
-
-
-        Transaction buyTransaction = new Transaction(buyerPortfolio, trade.tradeId(), trade.symbol(), trade.quantity(), trade.price(), OrderType.BUY,trade.executedAt());
-        Transaction sellTransaction = new Transaction(sellerPortfolio, trade.tradeId(), trade.symbol(), trade.quantity(), trade.price(), OrderType.SELL,trade.executedAt());
-
-        buyerPortfolio.addTransaction(buyTransaction);
-        sellerPortfolio.addTransaction(sellTransaction);
-
-        buyerPortfolio.applyTransaction(trade.symbol(), trade.quantity(), trade.price(), OrderType.BUY);
-        sellerPortfolio.applyTransaction(trade.symbol(), trade.quantity(), trade.price(), OrderType.SELL);
-
-        portfolioRepository.save(buyerPortfolio);
-        portfolioRepository.save(sellerPortfolio);
+        transaction.setStatus(TransactionStatus.COMPLETED);
+        transactionRepository.save(transaction);
     }
 
-    private Portfolio createPortfolioForUser(UUID userId) {
-        Portfolio newPortfolio = new Portfolio(userId);
-        return portfolioRepository.save(newPortfolio);
+//
+//    public void updatePortfoliosFromTrades(TradeListResponse trades) {
+//        for (var trade : trades.trades()) {
+//            transactionTemplate.executeWithoutResult(_ -> processSingleTrade(trade));
+//        }
+//    }
+
+    //
+//    public void processSingleTrade(TradeResponse trade) {
+//        UUID buyerUserId = trade.buyerUserId();
+//        UUID sellerUserId = trade.sellerUserId();
+//
+//        List<UUID> sortedUserIds = Stream.of(buyerUserId, sellerUserId)
+//                .sorted()
+//                .toList();
+//        long key1 = sortedUserIds.get(0).hashCode();
+//        long key2 = sortedUserIds.get(1).hashCode();
+//        portfolioRepository.acquireAdvisoryLock(key1);
+//        portfolioRepository.acquireAdvisoryLock(key2);
+//
+//        Portfolio firstPortfolio = getOrCreatePortfolio(sortedUserIds.get(0));
+//        Portfolio secondPortfolio = getOrCreatePortfolio(sortedUserIds.get(1));
+//
+//        Portfolio buyerPortfolio = firstPortfolio.getUserId().equals(buyerUserId) ? firstPortfolio : secondPortfolio;
+//        Portfolio sellerPortfolio = firstPortfolio.getUserId().equals(sellerUserId) ? firstPortfolio : secondPortfolio;
+//
+//        Transaction buyTransaction = new Transaction(
+//                buyerPortfolio,
+//                trade.tradeId(),
+//                trade.symbol(),
+//                trade.quantity(),
+//                trade.price(),
+//                OrderType.BUY,
+//                trade.executedAt(),
+//                trade.buyOrderId()
+//        );
+//
+//        Transaction sellTransaction = new Transaction(
+//                sellerPortfolio,
+//                trade.tradeId(),
+//                trade.symbol(),
+//                trade.quantity(),
+//                trade.price(),
+//                OrderType.SELL,
+//                trade.executedAt(),
+//                trade.sellOrderId()
+//        );
+//
+//        buyerPortfolio.addTransaction(buyTransaction);
+//        buyerPortfolio.applyTransaction(trade.symbol(), trade.quantity(), trade.price(), OrderType.BUY);
+//
+//        sellerPortfolio.addTransaction(sellTransaction);
+//        sellerPortfolio.applyTransaction(trade.symbol(), trade.quantity(), trade.price(), OrderType.SELL);
+//
+//        transactionRepository.saveAll(List.of(buyTransaction, sellTransaction));
+//    }
+    @Transactional
+    public Portfolio getOrCreatePortfolio(UUID userId) {
+        Optional<Portfolio> portfolioOpt = portfolioRepository.findByUserId(userId);
+
+        if (portfolioOpt.isPresent()) {
+            return portfolioOpt.get();
+        }
+
+        try {
+            Portfolio newPortfolio = new Portfolio(userId);
+            return portfolioRepository.save(newPortfolio);
+        } catch (DataIntegrityViolationException e) {
+            return portfolioRepository.findByUserId(userId)
+                    .orElseThrow(() -> new IllegalStateException("Falha crítica ao buscar portfólio para o usuário: " + userId, e));
+        }
     }
 
 }

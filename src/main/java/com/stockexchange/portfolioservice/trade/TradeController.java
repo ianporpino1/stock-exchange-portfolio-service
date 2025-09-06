@@ -1,7 +1,6 @@
 package com.stockexchange.portfolioservice.trade;
 
-import com.stockexchange.portfolioservice.portfolio.PortfolioService;
-import com.stockexchange.portfolioservice.trade.dto.TradeExecutedRequest;
+import com.stockexchange.portfolioservice.trade.dto.TradeListResponse;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -11,15 +10,15 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/trades")
 public class TradeController {
-    private final PortfolioService portfolioService;
+    private final TradeReceptionService tradeReceptionService;
 
-    public TradeController(PortfolioService portfolioService) {
-        this.portfolioService = portfolioService;
+    public TradeController(TradeReceptionService tradeReceptionService) {
+        this.tradeReceptionService = tradeReceptionService;
     }
 
-    @PostMapping("/trades")
-    public ResponseEntity<Void> processTrade(@RequestBody TradeExecutedRequest tradeExecutedRequest) {
-        portfolioService.updatePortfolioFromTrade(tradeExecutedRequest);
+    @PostMapping
+    public ResponseEntity<Void> processTrades(@RequestBody TradeListResponse trades) {
+        tradeReceptionService.createPendingTransactionsForTrades(trades);
         return ResponseEntity.ok().build();
     }
 }

@@ -16,9 +16,7 @@ public class Transaction {
     private UUID transactionId;
     @Column(nullable = false)
     private UUID tradeId;
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "portfolio_id", nullable = false)
-    private Portfolio portfolio;
+    private UUID userId;
     private String symbol;
     private int quantity;
     private BigDecimal price;
@@ -26,33 +24,39 @@ public class Transaction {
     private OrderType orderType;
     private Instant createdAt;
 
+    @Enumerated(EnumType.STRING)
+    private TransactionStatus status;
+
     protected Transaction() {}
 
-    public Transaction(Portfolio portfolio, UUID tradeId,String symbol, int quantity, BigDecimal price, OrderType orderType, Instant createdAt) {
-        this.portfolio = portfolio;
+    public Transaction(UUID tradeId,String symbol, int quantity, BigDecimal price, OrderType orderType, Instant createdAt, UUID userId) {
         this.tradeId = tradeId;
         this.symbol = symbol;
         this.quantity = quantity;
         this.price = price;
         this.orderType = orderType;
         this.createdAt = createdAt;
+        this.userId = userId;
+        this.status = TransactionStatus.PENDING;
     }
-
-
+    public TransactionStatus getStatus() {
+        return status;
+    }
+    public void setStatus(TransactionStatus status) {
+        this.status = status;
+    }
+    public UUID getUserId() {
+        return userId;
+    }
+    public void setUserId(UUID userId) {
+        this.userId = userId;
+    }
     public UUID getTransactionId() {
         return transactionId;
     }
 
     public void setTransactionId(UUID transactionId) {
         this.transactionId = transactionId;
-    }
-
-    public Portfolio getPortfolio() {
-        return portfolio;
-    }
-
-    public void setPortfolio(Portfolio portfolio) {
-        this.portfolio = portfolio;
     }
 
     public String getSymbol() {

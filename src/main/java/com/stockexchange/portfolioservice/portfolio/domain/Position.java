@@ -79,10 +79,10 @@ public class Position {
             this.averagePrice = newTotalValue.divide(BigDecimal.valueOf(this.quantity), 4, RoundingMode.HALF_UP);
         }
     }
-    public void processSell(int sellQuantity) {
+    public void processSell(int sellQuantity, BigDecimal price) {
         this.quantity -= sellQuantity;
         if (this.quantity == 0) {
-            this.averagePrice = BigDecimal.ZERO;
+            this.averagePrice = price;
         }
     }
 }

@@ -1,8 +1,6 @@
 package com.stockexchange.portfolioservice.portfolio;
 
 import com.stockexchange.portfolioservice.portfolio.dto.PortfolioResponse;
-import com.stockexchange.portfolioservice.trade.dto.TradeExecutedRequest;
-import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import java.util.UUID;
@@ -18,9 +16,9 @@ public class PortfolioController {
     }
 
     @GetMapping("/{userId}")
-    @PreAuthorize("#userId == principal.subject")
-    public PortfolioResponse getPortfolioByUserId(@PathVariable String userId) {
-        return portfolioService.getPortfolioByUserId(UUID.fromString(userId));
+    @PreAuthorize("#userId.toString() == principal.subject")
+    public PortfolioResponse getPortfolioByUserId(@PathVariable UUID userId) {
+        return portfolioService.getPortfolioByUserId(userId);
     }
 
 
