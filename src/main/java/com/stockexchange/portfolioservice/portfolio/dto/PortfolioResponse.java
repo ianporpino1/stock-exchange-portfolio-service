@@ -1,6 +1,7 @@
 package com.stockexchange.portfolioservice.portfolio.dto;
 
 import com.stockexchange.portfolioservice.portfolio.domain.Portfolio;
+import com.stockexchange.portfolioservice.position.PositionResponse;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -12,17 +13,12 @@ public record PortfolioResponse(
         BigDecimal cashBalance,
         List<PositionResponse> positions
 ) {
-    public PortfolioResponse(Portfolio portfolio) {
+    public PortfolioResponse(Portfolio portfolio, List<PositionResponse> positions) {
         this(
                 portfolio.getPortfolioId(),
                 portfolio.getUserId(),
                 portfolio.getCashBalance(),
-                portfolio.getPositions().stream()
-                        .map(position -> new PositionResponse(
-                                position.getSymbol(),
-                                position.getQuantity(),
-                                position.getAveragePrice()
-                        )).toList()
+                positions // A lista é injetada diretamente
         );
     }
 }

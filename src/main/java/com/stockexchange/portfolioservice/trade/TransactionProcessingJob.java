@@ -1,18 +1,17 @@
 package com.stockexchange.portfolioservice.trade;
 
 import com.stockexchange.portfolioservice.portfolio.PortfolioService;
-import jakarta.transaction.Transactional;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
-
-import java.util.List;
+import reactor.core.publisher.Flux;
 
 @Service
 public class TransactionProcessingJob {
 
     private final TransactionRepository transactionRepository;
     private final PortfolioService portfolioService;
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(TransactionProcessingJob.class);
 
     public TransactionProcessingJob(TransactionRepository transactionRepository, PortfolioService portfolioService) {
         this.transactionRepository = transactionRepository;
@@ -20,25 +19,24 @@ public class TransactionProcessingJob {
     }
 
     @Scheduled(fixedDelay = 5000)
-    @Transactional
     public void processPendingTransactions() {
-        System.out.println("JOB: Procurando por transações pendentes...");
+        log.info("JOB: Iniciando busca por transacoes pendentes...");
 
-        List<Transaction> pendingTransactions = transactionRepository.findTop100PendingForUpdate(PageRequest.of(0, 100));
+        transactionRepository.findTop100PendingForUpdate()
+                .collectList()
+                .flatMapMany(transactions -> {
+                    if (transactions.isEmpty()) {
+                        log.info("JOB: Nenhuma transacao pendente encontrada.");
+                        return Flux.empty();
+                    }
 
-        if (pendingTransactions.isEmpty()) {
-            return;
-        }
-
-        System.out.println("JOB: " + pendingTransactions.size() + " transações encontradas. Processando...");
-
-        for (Transaction transaction : pendingTransactions) {
-            try {
-                portfolioService.applyTransactionToPortfolio(transaction);
-            } catch (Exception e) {
-                System.err.println("Erro ao processar transação " + transaction.getTransactionId() + ": " + e.getMessage());
-            }
-        }
+                    log.info("JOB: {} transacoes encontradas. Processando...", transactions.size());
+                    return Flux.fromIterable(transactions);
+                })
+                .flatMap(portfolioService::applyTransactionToPortfolio, 1)
+                .doOnError(error -> log.error("JOB: Erro: ", error))
+                .then()
+                .block();
     }
 
 

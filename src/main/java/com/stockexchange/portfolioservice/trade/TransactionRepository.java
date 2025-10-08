@@ -1,18 +1,12 @@
 package com.stockexchange.portfolioservice.trade;
 
-import jakarta.persistence.LockModeType;
-import jakarta.persistence.QueryHint;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Lock;
-import org.springframework.data.jpa.repository.Query;
-import org.springframework.data.jpa.repository.QueryHints;
-import java.util.List;
+import org.springframework.data.r2dbc.repository.Query;
+import org.springframework.data.repository.reactive.ReactiveCrudRepository;
+import reactor.core.publisher.Flux;
 import java.util.UUID;
 
-public interface TransactionRepository extends JpaRepository<Transaction, UUID> {
-    @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @QueryHints({@QueryHint(name = "jakarta.persistence.lock.timeout", value = "1000")})
-    @Query(value = "SELECT t FROM Transaction t WHERE t.status = 'PENDING' ORDER BY t.createdAt ASC")
-    List<Transaction> findTop100PendingForUpdate(Pageable pageable);
+public interface TransactionRepository extends ReactiveCrudRepository<Transaction, UUID> {
+
+    @Query("SELECT * FROM transaction WHERE status = 'PENDING' ORDER BY created_at ASC LIMIT 100")
+    Flux<Transaction> findTop100PendingForUpdate();
 }

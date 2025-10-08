@@ -3,6 +3,7 @@ package com.stockexchange.portfolioservice.portfolio;
 import com.stockexchange.portfolioservice.portfolio.dto.PortfolioResponse;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import reactor.core.publisher.Mono;
 import java.util.UUID;
 
 @RestController
@@ -17,7 +18,7 @@ public class PortfolioController {
 
     @GetMapping("/{userId}")
     @PreAuthorize("#userId.toString() == principal.subject")
-    public PortfolioResponse getPortfolioByUserId(@PathVariable UUID userId) {
+    public Mono<PortfolioResponse> getPortfolioByUserId(@PathVariable UUID userId) {
         return portfolioService.getPortfolioByUserId(userId);
     }
 

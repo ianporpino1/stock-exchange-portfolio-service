@@ -1,122 +1,110 @@
 package com.stockexchange.portfolioservice.portfolio;
 
 import com.stockexchange.portfolioservice.exception.ErrorException;
-import com.stockexchange.portfolioservice.portfolio.domain.OrderType;
 import com.stockexchange.portfolioservice.portfolio.domain.Portfolio;
+import com.stockexchange.portfolioservice.position.Position;
+import com.stockexchange.portfolioservice.position.PositionRepository;
+import com.stockexchange.portfolioservice.position.PositionResponse;
 import com.stockexchange.portfolioservice.trade.Transaction;
 import com.stockexchange.portfolioservice.portfolio.dto.PortfolioResponse;
 import com.stockexchange.portfolioservice.trade.TransactionRepository;
 import com.stockexchange.portfolioservice.trade.TransactionStatus;
-import com.stockexchange.portfolioservice.trade.dto.TradeListResponse;
-import com.stockexchange.portfolioservice.trade.dto.TradeResponse;
-import jakarta.transaction.Transactional;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.support.TransactionTemplate;
+import org.springframework.transaction.annotation.Transactional;
+import reactor.core.publisher.Mono;
 
+import java.math.BigDecimal;
 import java.util.*;
-import java.util.stream.Stream;
 
 @Service
 public class PortfolioService {
     private final PortfolioRepository portfolioRepository;
     private final TransactionRepository transactionRepository;
-    private final TransactionTemplate transactionTemplate;
+    private final PositionRepository positionRepository;
 
-    public PortfolioService(PortfolioRepository portfolioRepository, TransactionRepository transactionRepository, TransactionTemplate transactionTemplate) {
+    public PortfolioService(PortfolioRepository portfolioRepository, TransactionRepository transactionRepository, PositionRepository positionRepository) {
         this.portfolioRepository = portfolioRepository;
         this.transactionRepository = transactionRepository;
-        this.transactionTemplate = transactionTemplate;
+        this.positionRepository = positionRepository;
     }
 
-    public PortfolioResponse getPortfolioByUserId(UUID userId) {
-        Portfolio portfolio = portfolioRepository.findByUserId(userId)
-                .orElseThrow(() -> new ErrorException("Portfolio não encontrado para o usuário com ID: " + userId));
-
-        return new PortfolioResponse(portfolio);
+    public Mono<PortfolioResponse> getPortfolioByUserId(UUID userId) {
+        return portfolioRepository.findByUserId(userId)
+                .switchIfEmpty(Mono.error(new ErrorException("Portfólio não encontrado para o usuário: " + userId)))
+                .flatMap(portfolio -> {
+                    Mono<List<PositionResponse>> positionsMono = positionRepository
+                            .findByPortfolioId(portfolio.getPortfolioId())
+                            .map(PositionResponse::new)
+                            .collectList()
+                            .defaultIfEmpty(Collections.emptyList());
+                    return Mono.just(portfolio)
+                            .zipWith(positionsMono, PortfolioResponse::new);
+                });
     }
 
     @Transactional
-    public void applyTransactionToPortfolio(Transaction transaction) {
+    public Mono<Void> applyTransactionToPortfolio(Transaction transaction) {
         UUID userId = transaction.getUserId();
-        Portfolio portfolio = getOrCreatePortfolio(userId);
-        portfolio.applyTransaction(transaction.getSymbol(), transaction.getQuantity(), transaction.getPrice(), transaction.getOrderType());
+        String symbol = transaction.getSymbol();
 
-        transaction.setStatus(TransactionStatus.COMPLETED);
-        transactionRepository.save(transaction);
+        Mono<Portfolio> portfolioMono = getOrCreatePortfolio(userId);
+
+        return portfolioMono.flatMap(portfolio -> {
+                    Mono<Position> positionMono = positionRepository
+                            .findByPortfolioIdAndSymbol(portfolio.getPortfolioId(), symbol)
+                            .switchIfEmpty(Mono.just(Position.create(symbol, portfolio.getPortfolioId())));
+
+                    return Mono.zip(Mono.just(portfolio), positionMono);
+                })
+                .flatMap(tuple -> {
+                    Portfolio portfolio = tuple.getT1();
+                    Position position = tuple.getT2();
+
+                    return switch (transaction.getOrderType()) {
+                        case BUY -> applyBuyLogic(transaction, portfolio, position);
+                        case SELL -> applySellLogic(transaction, portfolio, position);
+                    };
+                })
+                .flatMap(processedTransaction ->
+                        transactionRepository.save(processedTransaction.withStatus(TransactionStatus.COMPLETED))
+                )
+                .then();
     }
 
-//
-//    public void updatePortfoliosFromTrades(TradeListResponse trades) {
-//        for (var trade : trades.trades()) {
-//            transactionTemplate.executeWithoutResult(_ -> processSingleTrade(trade));
-//        }
-//    }
 
-    //
-//    public void processSingleTrade(TradeResponse trade) {
-//        UUID buyerUserId = trade.buyerUserId();
-//        UUID sellerUserId = trade.sellerUserId();
-//
-//        List<UUID> sortedUserIds = Stream.of(buyerUserId, sellerUserId)
-//                .sorted()
-//                .toList();
-//        long key1 = sortedUserIds.get(0).hashCode();
-//        long key2 = sortedUserIds.get(1).hashCode();
-//        portfolioRepository.acquireAdvisoryLock(key1);
-//        portfolioRepository.acquireAdvisoryLock(key2);
-//
-//        Portfolio firstPortfolio = getOrCreatePortfolio(sortedUserIds.get(0));
-//        Portfolio secondPortfolio = getOrCreatePortfolio(sortedUserIds.get(1));
-//
-//        Portfolio buyerPortfolio = firstPortfolio.getUserId().equals(buyerUserId) ? firstPortfolio : secondPortfolio;
-//        Portfolio sellerPortfolio = firstPortfolio.getUserId().equals(sellerUserId) ? firstPortfolio : secondPortfolio;
-//
-//        Transaction buyTransaction = new Transaction(
-//                buyerPortfolio,
-//                trade.tradeId(),
-//                trade.symbol(),
-//                trade.quantity(),
-//                trade.price(),
-//                OrderType.BUY,
-//                trade.executedAt(),
-//                trade.buyOrderId()
-//        );
-//
-//        Transaction sellTransaction = new Transaction(
-//                sellerPortfolio,
-//                trade.tradeId(),
-//                trade.symbol(),
-//                trade.quantity(),
-//                trade.price(),
-//                OrderType.SELL,
-//                trade.executedAt(),
-//                trade.sellOrderId()
-//        );
-//
-//        buyerPortfolio.addTransaction(buyTransaction);
-//        buyerPortfolio.applyTransaction(trade.symbol(), trade.quantity(), trade.price(), OrderType.BUY);
-//
-//        sellerPortfolio.addTransaction(sellTransaction);
-//        sellerPortfolio.applyTransaction(trade.symbol(), trade.quantity(), trade.price(), OrderType.SELL);
-//
-//        transactionRepository.saveAll(List.of(buyTransaction, sellTransaction));
-//    }
+    private Mono<Transaction> applyBuyLogic(Transaction transaction, Portfolio portfolio, Position position) {
+        BigDecimal totalCost = transaction.getPrice().multiply(BigDecimal.valueOf(transaction.getQuantity()));
+
+        if (portfolio.getCashBalance().compareTo(totalCost) < 0) {
+            return Mono.error(new ErrorException("Saldo insuficiente."));
+        }
+
+        Portfolio updatedPortfolio = portfolio.withUpdatedBalance(totalCost.negate());
+        Position updatedPosition = position.withBuy(transaction.getQuantity(), transaction.getPrice());
+
+        return portfolioRepository.save(updatedPortfolio)
+                .then(positionRepository.save(updatedPosition))
+                .thenReturn(transaction);
+    }
+
+    private Mono<Transaction> applySellLogic(Transaction transaction, Portfolio portfolio, Position position) {
+        BigDecimal totalCredit = transaction.getPrice().multiply(BigDecimal.valueOf(transaction.getQuantity()));
+        Portfolio updatedPortfolio = portfolio.withUpdatedBalance(totalCredit);
+        Position updatedPosition = position.withSell(transaction.getQuantity());
+
+        Mono<Void> positionPersistence = updatedPosition.getQuantity() == 0
+                ? positionRepository.delete(position)
+                : positionRepository.save(updatedPosition).then();
+
+        return portfolioRepository.save(updatedPortfolio)
+                .then(positionPersistence)
+                .thenReturn(transaction);
+    }
+
     @Transactional
-    public Portfolio getOrCreatePortfolio(UUID userId) {
-        Optional<Portfolio> portfolioOpt = portfolioRepository.findByUserId(userId);
-
-        if (portfolioOpt.isPresent()) {
-            return portfolioOpt.get();
-        }
-
-        try {
-            Portfolio newPortfolio = new Portfolio(userId);
-            return portfolioRepository.save(newPortfolio);
-        } catch (DataIntegrityViolationException e) {
-            return portfolioRepository.findByUserId(userId)
-                    .orElseThrow(() -> new IllegalStateException("Falha crítica ao buscar portfólio para o usuário: " + userId, e));
-        }
+    public Mono<Portfolio> getOrCreatePortfolio(UUID userId) {
+        return portfolioRepository.findByUserId(userId)
+                .switchIfEmpty(portfolioRepository.save(Portfolio.create(userId)));
     }
 
 }

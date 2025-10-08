@@ -1,44 +1,62 @@
 package com.stockexchange.portfolioservice.trade;
 
 import com.stockexchange.portfolioservice.portfolio.domain.OrderType;
-import com.stockexchange.portfolioservice.portfolio.domain.Portfolio;
-import jakarta.persistence.*;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.relational.core.mapping.Column;
+import org.springframework.data.relational.core.mapping.Table;
+
 
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
 
-@Entity
-@Table(name = "transaction")
+@Table("transaction")
 public class Transaction {
+
     @Id
-    @GeneratedValue(strategy = GenerationType.AUTO)
+    @Column("transaction_id")
     private UUID transactionId;
-    @Column(nullable = false)
+
     private UUID tradeId;
     private UUID userId;
     private String symbol;
     private int quantity;
     private BigDecimal price;
-    @Enumerated(EnumType.STRING)
     private OrderType orderType;
+    @Column("created_at")
     private Instant createdAt;
-
-    @Enumerated(EnumType.STRING)
     private TransactionStatus status;
 
-    protected Transaction() {}
-
-    public Transaction(UUID tradeId,String symbol, int quantity, BigDecimal price, OrderType orderType, Instant createdAt, UUID userId) {
+    public Transaction(UUID transactionId, UUID tradeId, UUID userId, String symbol, int quantity, BigDecimal price, OrderType orderType, Instant createdAt, TransactionStatus status) {
+        this.transactionId = transactionId;
         this.tradeId = tradeId;
+        this.userId = userId;
         this.symbol = symbol;
         this.quantity = quantity;
         this.price = price;
         this.orderType = orderType;
         this.createdAt = createdAt;
-        this.userId = userId;
-        this.status = TransactionStatus.PENDING;
+        this.status = status;
     }
+
+    public static Transaction create(UUID tradeId, String symbol, int quantity, BigDecimal price, OrderType orderType, Instant createdAt, UUID userId) {
+        return new Transaction(null, tradeId, userId, symbol, quantity, price, orderType, createdAt, TransactionStatus.PENDING);
+    }
+
+    public Transaction withStatus(TransactionStatus newStatus) {
+        return new Transaction(
+                this.transactionId,
+                this.tradeId,
+                this.userId,
+                this.symbol,
+                this.quantity,
+                this.price,
+                this.orderType,
+                this.createdAt,
+                newStatus
+        );
+    }
+
     public TransactionStatus getStatus() {
         return status;
     }
