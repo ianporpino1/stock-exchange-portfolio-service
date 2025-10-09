@@ -74,11 +74,6 @@ public class PortfolioService {
 
     private Mono<Transaction> applyBuyLogic(Transaction transaction, Portfolio portfolio, Position position) {
         BigDecimal totalCost = transaction.getPrice().multiply(BigDecimal.valueOf(transaction.getQuantity()));
-
-        if (portfolio.getCashBalance().compareTo(totalCost) < 0) {
-            return Mono.error(new ErrorException("Saldo insuficiente."));
-        }
-
         Portfolio updatedPortfolio = portfolio.withUpdatedBalance(totalCost.negate());
         Position updatedPosition = position.withBuy(transaction.getQuantity(), transaction.getPrice());
 
