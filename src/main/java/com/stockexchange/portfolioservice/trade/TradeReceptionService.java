@@ -1,9 +1,6 @@
 package com.stockexchange.portfolioservice.trade;
 
-import com.stockexchange.portfolioservice.portfolio.PortfolioRepository;
-import com.stockexchange.portfolioservice.portfolio.PortfolioService;
 import com.stockexchange.portfolioservice.portfolio.domain.OrderType;
-import com.stockexchange.portfolioservice.portfolio.domain.Portfolio;
 import com.stockexchange.portfolioservice.trade.dto.TradeListResponse;
 import com.stockexchange.portfolioservice.trade.dto.TradeResponse;
 import jakarta.transaction.Transactional;

@@ -24,7 +24,7 @@ public class TransactionProcessingJob {
     public void processPendingTransactions() {
         System.out.println("JOB: Procurando por transações pendentes...");
 
-        List<Transaction> pendingTransactions = transactionRepository.findTop100PendingForUpdate(PageRequest.of(0, 100));
+        List<Transaction> pendingTransactions = transactionRepository.findTop1000PendingForUpdate();
 
         if (pendingTransactions.isEmpty()) {
             return;
