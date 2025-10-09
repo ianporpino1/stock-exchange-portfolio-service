@@ -22,7 +22,7 @@ public class TransactionProcessingJob {
     public void processPendingTransactions() {
         log.info("JOB: Iniciando busca por transacoes pendentes...");
 
-        transactionRepository.findTop100PendingForUpdate()
+        transactionRepository.findTop1000PendingForUpdate()
                 .collectList()
                 .flatMapMany(transactions -> {
                     if (transactions.isEmpty()) {

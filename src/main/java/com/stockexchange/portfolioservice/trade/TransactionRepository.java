@@ -7,6 +7,6 @@ import java.util.UUID;
 
 public interface TransactionRepository extends ReactiveCrudRepository<Transaction, UUID> {
 
-    @Query("SELECT * FROM transaction WHERE status = 'PENDING' ORDER BY created_at ASC LIMIT 100")
-    Flux<Transaction> findTop100PendingForUpdate();
+    @Query("SELECT * FROM transaction WHERE status = 'PENDING' ORDER BY created_at ASC LIMIT 1000")
+    Flux<Transaction> findTop1000PendingForUpdate();
 }
