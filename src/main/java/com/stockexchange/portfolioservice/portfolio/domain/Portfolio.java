@@ -84,10 +84,6 @@ public class Portfolio {
     private void applyBuyLogic(int quantity, BigDecimal price, Position position) {
         BigDecimal totalCost = price.multiply(BigDecimal.valueOf(quantity));
 
-        if (this.cashBalance.compareTo(totalCost) < 0) {
-            throw new ErrorException("Saldo insuficiente.");
-        }
-
         this.cashBalance = this.cashBalance.subtract(totalCost);
         position.processBuy(quantity, price);
     }
