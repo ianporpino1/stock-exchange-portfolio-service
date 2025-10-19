@@ -13,11 +13,13 @@ import org.springframework.security.web.server.SecurityWebFilterChain;
 @EnableWebFluxSecurity
 public class SecurityConfig {
     @Bean
-    SecurityWebFilterChain securityFilterChain(ServerHttpSecurity http) throws Exception {
+    SecurityWebFilterChain securityFilterChain(ServerHttpSecurity http) {
         http.csrf(ServerHttpSecurity.CsrfSpec::disable)
                 .authorizeExchange(exchange -> exchange
                         .pathMatchers("/trades").permitAll()
                         .pathMatchers("/actuator/**").permitAll()
+                        .pathMatchers("/graphiql").permitAll()
+                        .pathMatchers("/graphql").permitAll()
                         .anyExchange().authenticated())
                 .oauth2ResourceServer(conf -> conf.jwt(Customizer.withDefaults()));
 

@@ -5,7 +5,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
 
-public record TradeResponse(UUID tradeId,
+public record TradeInput(UUID tradeId,
                             UUID buyOrderId,
                             UUID sellOrderId,
                             UUID buyerUserId,

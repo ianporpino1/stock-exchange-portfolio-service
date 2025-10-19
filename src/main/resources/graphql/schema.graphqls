@@ -1,0 +1,23 @@
+input TradeInput {
+    tradeId: ID
+    buyOrderId: ID
+    sellOrderId: ID
+    buyerUserId: ID
+    sellerUserId: ID
+    symbol: String
+    quantity: Int
+    price: Float
+    executedAt: String
+}
+
+input TradeListInput {
+    trades: [TradeInput]
+}
+
+type Mutation {
+    processTrades(trades: TradeListInput): Boolean
+}
+
+type Query {
+    _dummy: String
+}

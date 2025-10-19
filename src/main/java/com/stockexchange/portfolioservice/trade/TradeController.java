@@ -1,14 +1,12 @@
 package com.stockexchange.portfolioservice.trade;
 
-import com.stockexchange.portfolioservice.trade.dto.TradeListResponse;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import com.stockexchange.portfolioservice.trade.dto.TradeListInput;
+import org.springframework.graphql.data.method.annotation.Argument;
+import org.springframework.graphql.data.method.annotation.MutationMapping;
+import org.springframework.stereotype.Controller;
 import reactor.core.publisher.Mono;
 
-@RestController
-@RequestMapping("/trades")
+@Controller
 public class TradeController {
     private final TradeReceptionService tradeReceptionService;
 
@@ -16,8 +14,10 @@ public class TradeController {
         this.tradeReceptionService = tradeReceptionService;
     }
 
-    @PostMapping
-    public Mono<Void> processTrades(@RequestBody TradeListResponse trades) {
-        return tradeReceptionService.createPendingTransactionsForTrades(trades);
+    @MutationMapping
+    public Mono<Boolean> processTrades(@Argument("trades") TradeListInput trades) {
+        return tradeReceptionService.createPendingTransactionsForTrades(trades)
+                .thenReturn(true)
+                .onErrorResume(_ -> Mono.just(false));
     }
 }
