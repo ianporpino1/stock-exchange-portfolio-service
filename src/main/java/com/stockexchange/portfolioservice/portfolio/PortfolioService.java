@@ -1,0 +1,105 @@
+package com.stockexchange.portfolioservice.portfolio;
+
+import com.stockexchange.portfolioservice.exception.ErrorException;
+import com.stockexchange.portfolioservice.portfolio.domain.Portfolio;
+import com.stockexchange.portfolioservice.position.Position;
+import com.stockexchange.portfolioservice.position.PositionRepository;
+import com.stockexchange.portfolioservice.position.PositionResponse;
+import com.stockexchange.portfolioservice.trade.Transaction;
+import com.stockexchange.portfolioservice.portfolio.dto.PortfolioResponse;
+import com.stockexchange.portfolioservice.trade.TransactionRepository;
+import com.stockexchange.portfolioservice.trade.TransactionStatus;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import reactor.core.publisher.Mono;
+
+import java.math.BigDecimal;
+import java.util.*;
+
+@Service
+public class PortfolioService {
+    private final PortfolioRepository portfolioRepository;
+    private final TransactionRepository transactionRepository;
+    private final PositionRepository positionRepository;
+
+    public PortfolioService(PortfolioRepository portfolioRepository, TransactionRepository transactionRepository, PositionRepository positionRepository) {
+        this.portfolioRepository = portfolioRepository;
+        this.transactionRepository = transactionRepository;
+        this.positionRepository = positionRepository;
+    }
+
+    public Mono<PortfolioResponse> getPortfolioByUserId(UUID userId) {
+        return portfolioRepository.findByUserId(userId)
+                .switchIfEmpty(Mono.error(new ErrorException("Portfólio não encontrado para o usuário: " + userId)))
+                .flatMap(portfolio -> {
+                    Mono<List<PositionResponse>> positionsMono = positionRepository
+                            .findByPortfolioId(portfolio.getPortfolioId())
+                            .map(PositionResponse::new)
+                            .collectList()
+                            .defaultIfEmpty(Collections.emptyList());
+                    return Mono.just(portfolio)
+                            .zipWith(positionsMono, PortfolioResponse::new);
+                });
+    }
+
+    @Transactional
+    public Mono<Void> applyTransactionToPortfolio(Transaction transaction) {
+        UUID userId = transaction.getUserId();
+        String symbol = transaction.getSymbol();
+
+        Mono<Portfolio> portfolioMono = getOrCreatePortfolio(userId);
+
+        return portfolioMono.flatMap(portfolio -> {
+                    Mono<Position> positionMono = positionRepository
+                            .findByPortfolioIdAndSymbol(portfolio.getPortfolioId(), symbol)
+                            .switchIfEmpty(Mono.just(Position.create(symbol, portfolio.getPortfolioId())));
+
+                    return Mono.zip(Mono.just(portfolio), positionMono);
+                })
+                .flatMap(tuple -> {
+                    Portfolio portfolio = tuple.getT1();
+                    Position position = tuple.getT2();
+
+                    return switch (transaction.getOrderType()) {
+                        case BUY -> applyBuyLogic(transaction, portfolio, position);
+                        case SELL -> applySellLogic(transaction, portfolio, position);
+                    };
+                })
+                .flatMap(processedTransaction ->
+                        transactionRepository.save(processedTransaction.withStatus(TransactionStatus.COMPLETED))
+                )
+                .then();
+    }
+
+
+    private Mono<Transaction> applyBuyLogic(Transaction transaction, Portfolio portfolio, Position position) {
+        BigDecimal totalCost = transaction.getPrice().multiply(BigDecimal.valueOf(transaction.getQuantity()));
+        Portfolio updatedPortfolio = portfolio.withUpdatedBalance(totalCost.negate());
+        Position updatedPosition = position.withBuy(transaction.getQuantity(), transaction.getPrice());
+
+        return portfolioRepository.save(updatedPortfolio)
+                .then(positionRepository.save(updatedPosition))
+                .thenReturn(transaction);
+    }
+
+    private Mono<Transaction> applySellLogic(Transaction transaction, Portfolio portfolio, Position position) {
+        BigDecimal totalCredit = transaction.getPrice().multiply(BigDecimal.valueOf(transaction.getQuantity()));
+        Portfolio updatedPortfolio = portfolio.withUpdatedBalance(totalCredit);
+        Position updatedPosition = position.withSell(transaction.getQuantity());
+
+        Mono<Void> positionPersistence = updatedPosition.getQuantity() == 0
+                ? positionRepository.delete(position)
+                : positionRepository.save(updatedPosition).then();
+
+        return portfolioRepository.save(updatedPortfolio)
+                .then(positionPersistence)
+                .thenReturn(transaction);
+    }
+
+    @Transactional
+    public Mono<Portfolio> getOrCreatePortfolio(UUID userId) {
+        return portfolioRepository.findByUserId(userId)
+                .switchIfEmpty(portfolioRepository.save(Portfolio.create(userId)));
+    }
+
+}
