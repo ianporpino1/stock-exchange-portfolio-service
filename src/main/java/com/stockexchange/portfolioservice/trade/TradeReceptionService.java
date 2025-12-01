@@ -2,11 +2,12 @@ package com.stockexchange.portfolioservice.trade;
 
 import com.stockexchange.portfolioservice.portfolio.domain.OrderType;
 import com.stockexchange.portfolioservice.trade.dto.TradeListResponse;
-import com.stockexchange.portfolioservice.trade.dto.TradeResponse;
+import com.stockexchange.portfolioservice.trade.event.TradeExecutedEvent;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import reactor.core.publisher.Mono;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Stream;
 
@@ -48,6 +49,33 @@ public class TradeReceptionService {
         if (allTransactions.isEmpty()) {
             return Mono.empty();
         }
+
+        return transactionRepository.saveAll(allTransactions).then();
+    }
+
+    @Transactional
+    public Mono<Void> createPendingTransactionsForTrade(TradeExecutedEvent trade) {
+        List<Transaction> allTransactions = new ArrayList<>();
+        Transaction buyTransaction = Transaction.create(
+                trade.tradeId(),
+                trade.symbol(),
+                trade.quantity(),
+                trade.price(),
+                OrderType.BUY,
+                trade.executedAt(),
+                trade.buyerUserId()
+        );
+        Transaction sellTransaction = Transaction.create(
+                trade.tradeId(),
+                trade.symbol(),
+                trade.quantity(),
+                trade.price(),
+                OrderType.SELL,
+                trade.executedAt(),
+                trade.sellerUserId()
+        );
+        allTransactions.add(buyTransaction);
+        allTransactions.add(sellTransaction);
 
         return transactionRepository.saveAll(allTransactions).then();
     }
