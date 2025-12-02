@@ -4,6 +4,7 @@ import com.stockexchange.portfolioservice.trade.TradeReceptionService;
 import com.stockexchange.portfolioservice.trade.event.TradeExecutedEvent;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.messaging.Message;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import java.util.function.Function;
@@ -17,8 +18,10 @@ public class TradeHandler {
     }
 
     @Bean
-    public Function<Flux<TradeExecutedEvent>, Mono<Void>> handleTrade(){
+    public Function<Flux<Message<TradeExecutedEvent>>, Mono<Void>> handleTrade(){
         return flux ->
-                flux.flatMap(tradeReceptionService::createPendingTransactionsForTrade).then();
+                flux.filter(msg -> "trade.executed".equals(msg.getHeaders().get("eventType")))
+                        .map(Message::getPayload)
+                        .flatMap(tradeReceptionService::createPendingTransactionsForTrade).then();
     }
 }
