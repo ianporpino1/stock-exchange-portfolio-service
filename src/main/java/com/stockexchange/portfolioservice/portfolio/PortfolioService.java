@@ -1,7 +1,9 @@
 package com.stockexchange.portfolioservice.portfolio;
 
 import com.stockexchange.portfolioservice.exception.ErrorException;
+import com.stockexchange.portfolioservice.portfolio.domain.OrderType;
 import com.stockexchange.portfolioservice.portfolio.domain.Portfolio;
+import com.stockexchange.portfolioservice.portfolio.event.OrderEvent;
 import com.stockexchange.portfolioservice.position.Position;
 import com.stockexchange.portfolioservice.position.PositionRepository;
 import com.stockexchange.portfolioservice.position.PositionResponse;
@@ -9,6 +11,8 @@ import com.stockexchange.portfolioservice.trade.Transaction;
 import com.stockexchange.portfolioservice.portfolio.dto.PortfolioResponse;
 import com.stockexchange.portfolioservice.trade.TransactionRepository;
 import com.stockexchange.portfolioservice.trade.TransactionStatus;
+import org.reactivestreams.Publisher;
+import org.slf4j.Logger;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import reactor.core.publisher.Mono;
@@ -21,6 +25,7 @@ public class PortfolioService {
     private final PortfolioRepository portfolioRepository;
     private final TransactionRepository transactionRepository;
     private final PositionRepository positionRepository;
+    Logger log = org.slf4j.LoggerFactory.getLogger(PortfolioService.class);
 
     public PortfolioService(PortfolioRepository portfolioRepository, TransactionRepository transactionRepository, PositionRepository positionRepository) {
         this.portfolioRepository = portfolioRepository;
@@ -74,7 +79,8 @@ public class PortfolioService {
 
     private Mono<Transaction> applyBuyLogic(Transaction transaction, Portfolio portfolio, Position position) {
         BigDecimal totalCost = transaction.getPrice().multiply(BigDecimal.valueOf(transaction.getQuantity()));
-        Portfolio updatedPortfolio = portfolio.withUpdatedBalance(totalCost.negate());
+
+        Portfolio updatedPortfolio = portfolio.withBuySettled(totalCost);
         Position updatedPosition = position.withBuy(transaction.getQuantity(), transaction.getPrice());
 
         return portfolioRepository.save(updatedPortfolio)
@@ -84,7 +90,9 @@ public class PortfolioService {
 
     private Mono<Transaction> applySellLogic(Transaction transaction, Portfolio portfolio, Position position) {
         BigDecimal totalCredit = transaction.getPrice().multiply(BigDecimal.valueOf(transaction.getQuantity()));
-        Portfolio updatedPortfolio = portfolio.withUpdatedBalance(totalCredit);
+
+        Portfolio updatedPortfolio = portfolio.withSellSettled(totalCredit);
+
         Position updatedPosition = position.withSell(transaction.getQuantity());
 
         Mono<Void> positionPersistence = updatedPosition.getQuantity() == 0
@@ -96,10 +104,43 @@ public class PortfolioService {
                 .thenReturn(transaction);
     }
 
-    @Transactional
     public Mono<Portfolio> getOrCreatePortfolio(UUID userId) {
         return portfolioRepository.findByUserId(userId)
-                .switchIfEmpty(portfolioRepository.save(Portfolio.create(userId)));
+                .switchIfEmpty(
+                        portfolioRepository.save(Portfolio.create(userId))
+                                .onErrorResume(org.springframework.dao.DuplicateKeyException.class,
+                                        e -> portfolioRepository.findByUserId(userId))
+                );
     }
 
+    public Mono<Boolean> hasBalance(OrderEvent.OrderCreated order) {
+        BigDecimal requiredAmount = order.price().multiply(BigDecimal.valueOf(order.quantity()));
+
+        if (order.orderType() == OrderType.BUY) {
+            return getOrCreatePortfolio(order.userId())
+                    .flatMap(_ ->
+                            portfolioRepository.reserveCash(order.userId(), requiredAmount)
+                    )
+                    .map(rowsUpdated -> rowsUpdated > 0)
+                    .defaultIfEmpty(false);
+        } else {
+            return Mono.just(true);
+        }
+    }
+
+    public Mono<Void> refund(OrderEvent.OrderRejected event) {
+        if (event.orderType() == OrderType.BUY) {
+            BigDecimal amountToRefund = event.price().multiply(BigDecimal.valueOf(event.quantity()));
+            return portfolioRepository.refundCash(event.userId(), amountToRefund).then();
+        }
+        return Mono.empty();
+    }
+
+//
+//    private Mono<Boolean> checkStockPosition(UUID userId, String symbol, int quantityToSell) {
+//        return portfolioRepository.findByUserId(userId)
+//                .flatMap(portfolio -> positionRepository.findByPortfolioIdAndSymbol(portfolio.getPortfolioId(), symbol))
+//                .map(position -> position.getQuantity() >= quantityToSell)
+//                .defaultIfEmpty(false);
+//    }
 }

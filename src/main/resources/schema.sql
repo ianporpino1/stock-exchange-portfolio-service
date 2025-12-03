@@ -4,7 +4,8 @@ CREATE TABLE IF NOT EXISTS portfolio
 (
     portfolio_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id      UUID           NOT NULL UNIQUE,
-    cash_balance NUMERIC(38, 2) NOT NULL DEFAULT 100000.00
+    cash_balance NUMERIC(38, 2) NOT NULL DEFAULT 100000.00,
+    blocked_balance NUMERIC(38, 2) NOT NULL DEFAULT 0.00
 );
 
 CREATE TABLE IF NOT EXISTS position

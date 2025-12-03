@@ -2,7 +2,6 @@ package com.stockexchange.portfolioservice.portfolio.dto;
 
 import com.stockexchange.portfolioservice.portfolio.domain.Portfolio;
 import com.stockexchange.portfolioservice.position.PositionResponse;
-
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
@@ -18,7 +17,7 @@ public record PortfolioResponse(
                 portfolio.getPortfolioId(),
                 portfolio.getUserId(),
                 portfolio.getCashBalance(),
-                positions // A lista é injetada diretamente
+                positions
         );
     }
 }
