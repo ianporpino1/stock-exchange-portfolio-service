@@ -23,7 +23,9 @@ public class OrderHandler {
 
     @Bean
     public Function<Flux<Message<OrderEvent.OrderCreated>>, Flux<Message<BalanceEvent>>> handleOrderCreated() {
-        return flux -> flux.flatMap(message -> {
+        return flux -> flux
+                .filter(msg -> "order.created".equals(msg.getHeaders().get("eventType")))
+                .flatMap(message -> {
             OrderEvent.OrderCreated order = message.getPayload();
             return portfolioService.hasBalance(order)
                     .map(hasBalance -> {
@@ -53,7 +55,9 @@ public class OrderHandler {
 
     @Bean
     public Function<Flux<Message<OrderEvent.OrderRejected>>, Mono<Void>> handleOrderRejected() {
-        return flux -> flux.concatMap(message -> {
+        return flux -> flux
+                .filter(msg -> "order.rejected".equals(msg.getHeaders().get("eventType")))
+                .concatMap(message -> {
             OrderEvent.OrderRejected event = message.getPayload();
             return portfolioService.refund(event);
         }).then();
