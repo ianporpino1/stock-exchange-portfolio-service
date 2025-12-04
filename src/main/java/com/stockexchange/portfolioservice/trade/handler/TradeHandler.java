@@ -20,7 +20,7 @@ public class TradeHandler {
     @Bean
     public Function<Flux<Message<TradeExecutedEvent>>, Mono<Void>> handleTrade(){
         return flux ->
-                flux.filter(msg -> "trade.executed".equals(msg.getHeaders().get("eventType")))
+                flux.filter(msg -> "portfolio.update".equals(msg.getHeaders().get("eventType")))
                         .map(Message::getPayload)
                         .flatMap(tradeReceptionService::createPendingTransactionsForTrade).then();
     }

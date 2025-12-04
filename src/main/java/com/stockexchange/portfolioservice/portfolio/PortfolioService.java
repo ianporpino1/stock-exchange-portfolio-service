@@ -4,6 +4,7 @@ import com.stockexchange.portfolioservice.exception.ErrorException;
 import com.stockexchange.portfolioservice.portfolio.domain.OrderType;
 import com.stockexchange.portfolioservice.portfolio.domain.Portfolio;
 import com.stockexchange.portfolioservice.portfolio.event.OrderEvent;
+import com.stockexchange.portfolioservice.portfolio.event.RefundCommand;
 import com.stockexchange.portfolioservice.position.Position;
 import com.stockexchange.portfolioservice.position.PositionRepository;
 import com.stockexchange.portfolioservice.position.PositionResponse;
@@ -11,7 +12,6 @@ import com.stockexchange.portfolioservice.trade.Transaction;
 import com.stockexchange.portfolioservice.portfolio.dto.PortfolioResponse;
 import com.stockexchange.portfolioservice.trade.TransactionRepository;
 import com.stockexchange.portfolioservice.trade.TransactionStatus;
-import org.reactivestreams.Publisher;
 import org.slf4j.Logger;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -113,13 +113,11 @@ public class PortfolioService {
                 );
     }
 
-    public Mono<Boolean> hasBalance(OrderEvent.OrderCreated order) {
-        BigDecimal requiredAmount = order.price().multiply(BigDecimal.valueOf(order.quantity()));
-
-        if (order.orderType() == OrderType.BUY) {
-            return getOrCreatePortfolio(order.userId())
+    public Mono<Boolean> hasBalance(UUID userId, OrderType type,BigDecimal requiredAmount) {
+        if (type == OrderType.BUY) {
+            return getOrCreatePortfolio(userId)
                     .flatMap(_ ->
-                            portfolioRepository.reserveCash(order.userId(), requiredAmount)
+                            portfolioRepository.reserveCash(userId, requiredAmount)
                     )
                     .map(rowsUpdated -> rowsUpdated > 0)
                     .defaultIfEmpty(false);
@@ -128,10 +126,9 @@ public class PortfolioService {
         }
     }
 
-    public Mono<Void> refund(OrderEvent.OrderRejected event) {
-        if (event.orderType() == OrderType.BUY) {
-            BigDecimal amountToRefund = event.price().multiply(BigDecimal.valueOf(event.quantity()));
-            return portfolioRepository.refundCash(event.userId(), amountToRefund).then();
+    public Mono<Void> refund(RefundCommand command) {
+        if (command.orderType() == OrderType.BUY) {
+            return portfolioRepository.refundCash(command.userId(), command.amount()).then();
         }
         return Mono.empty();
     }
